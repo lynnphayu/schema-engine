@@ -1,56 +1,59 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Config } from "drizzle-kit";
+import type { z } from "zod";
+import type { schemaDefinitionSchema } from "../types/schema";
 
 const execAsync = promisify(exec);
 
-export default {
-  drizzleToSQL: async (config: string) => {
+export class DrizzleService {
+  async drizzleToSQL(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit generate --config=${config}`
+      `pnpm drizzle-kit generate --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit generation failed: ${stderr}`);
     }
-  },
+  }
 
-  migrate: async (config: string) => {
+  async migrate(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit migrate --config=${config}`
+      `pnpm drizzle-kit migrate --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit migration failed: ${stderr}`);
     }
-  },
+  }
 
-  pull: async (config: string) => {
+  async pull(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit pull --config=${config}`
-    );
+      `pnpm drizzle-kit pull --config=${config}`,
+    ).catch((err) => {
+      console.error(err);
+      throw err;
+    });
     if (stderr) {
       throw new Error(`Drizzle kit pull failed: ${stderr}`);
     }
-  },
+  }
 
-  validate: async (config: string) => {
+  async validate(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit check --config=${config}`
+      `pnpm drizzle-kit check --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit validation failed: ${stderr}`);
     }
-  },
+  }
 
-  updateSnapshot: async (config: string) => {
-    const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit up --config=${config}`
-    );
+  async updateSnapshot(config: string): Promise<void> {
+    const { stdout: _stdout, stderr } = await execAsync(`pnpm drizzle-kit up --config=${config}`);
     if (stderr) {
       throw new Error(`Drizzle kit snapshot update failed: ${stderr}`);
     }
-  },
+  }
 
-  generateCfg: async (prefix: string, userId: string) => {
+  async generateConfig(prefix: string, userId: string): Promise<Config> {
     const config: Config = {
       dialect: "postgresql",
       schema: `${prefix}/${userId}/schema.ts`,
@@ -60,35 +63,29 @@ export default {
         table: `__${userId}__migrations__`,
       },
       dbCredentials: {
-        host: process.env.DB_HOST || "localhost",
-        port: Number.parseInt(process.env.DB_PORT || "5432"),
-        user: process.env.DB_USER || "v1nislpo@sphnet.com.sg",
-        database: process.env.DB_NAME || "DAG",
-        ssl: false,
+        url: process.env.DATABASE_URL || "postgresql://postgres@127.0.0.1:5432/schemas",
       },
     };
 
     return config;
-  },
+  }
 
-  jsonToDrizzle(schema: SchemaDefinition): string {
+  jsonToDrizzle(schema: z.infer<typeof schemaDefinitionSchema>): string {
     let drizzleSchema = `import { pgTable, serial, varchar, timestamp, integer, text, boolean, numeric, date, time, json, jsonb, uuid, decimal, real, doublePrecision } from 'drizzle-orm/pg-core';
-  
-  `;
+
+`;
 
     // Generate table definitions
     for (const table of schema.tables) {
       drizzleSchema += `export const ${table.name} = pgTable('${table.name}', {
-  `;
+`;
 
       // Generate column definitions
       for (const column of table.columns) {
         let drizzleType: string;
 
         // Map SQL types to Drizzle ORM types
-        const typeMatch = column.type
-          .toLowerCase()
-          .match(/^([a-z]+)(\((\d+)\))?/i);
+        const typeMatch = column.type.toLowerCase().match(/^([a-z]+)(\((\d+)\))?/i);
         const baseType = typeMatch ? typeMatch[1] : column.type.toLowerCase();
         const size = typeMatch ? typeMatch[3] : null;
 
@@ -154,10 +151,7 @@ export default {
           drizzleType += ".notNull()";
         }
         if (column.default) {
-          if (
-            baseType === "timestamp" &&
-            column.default.toLowerCase() === "current_timestamp"
-          ) {
+          if (baseType === "timestamp" && column.default.toLowerCase() === "current_timestamp") {
             drizzleType += ".defaultNow()";
           } else {
             drizzleType += `.default(${column.default})`;
@@ -167,26 +161,11 @@ export default {
         drizzleSchema += `  ${column.name}: ${drizzleType},\n`;
       }
 
-      drizzleSchema += "});";
+      drizzleSchema += "});\n\n";
     }
 
     return drizzleSchema;
-  },
-};
-
-export interface ColumnDefinition {
-  name: string;
-  type: string;
-  unique?: boolean;
-  nullable?: boolean;
-  default?: string;
+  }
 }
 
-export interface TableDefinition {
-  name: string;
-  columns: ColumnDefinition[];
-}
-
-export interface SchemaDefinition {
-  tables: TableDefinition[];
-}
+export const drizzleService = new DrizzleService();
