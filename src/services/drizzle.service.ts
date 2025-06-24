@@ -6,26 +6,26 @@ import type { schemaDefinitionSchema } from "../types/schema";
 
 const execAsync = promisify(exec);
 
-export class DrizzleService {
-  async drizzleToSQL(config: string): Promise<void> {
+export default () => ({
+  drizzleToSQL: async (config: string): Promise<void> => {
     const { stdout: _stdout, stderr } = await execAsync(
       `pnpm drizzle-kit generate --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit generation failed: ${stderr}`);
     }
-  }
+  },
 
-  async migrate(config: string): Promise<void> {
+  migrate: async (config: string): Promise<void> => {
     const { stdout: _stdout, stderr } = await execAsync(
       `pnpm drizzle-kit migrate --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit migration failed: ${stderr}`);
     }
-  }
+  },
 
-  async pull(config: string): Promise<void> {
+  pull: async (config: string): Promise<void> => {
     const { stdout: _stdout, stderr } = await execAsync(
       `pnpm drizzle-kit pull --config=${config}`,
     ).catch((err) => {
@@ -35,27 +35,27 @@ export class DrizzleService {
     if (stderr) {
       throw new Error(`Drizzle kit pull failed: ${stderr}`);
     }
-  }
+  },
 
-  async validate(config: string): Promise<void> {
+  validate: async (config: string): Promise<void> => {
     const { stdout: _stdout, stderr } = await execAsync(
       `pnpm drizzle-kit check --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit validation failed: ${stderr}`);
     }
-  }
+  },
 
-  async updateSnapshot(config: string): Promise<void> {
+  updateSnapshot: async (config: string): Promise<void> => {
     const { stdout: _stdout, stderr } = await execAsync(
       `pnpm drizzle-kit up --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit snapshot update failed: ${stderr}`);
     }
-  }
+  },
 
-  async generateConfig(prefix: string, userId: string): Promise<Config> {
+  generateConfig: async (prefix: string, userId: string): Promise<Config> => {
     const config: Config = {
       dialect: "postgresql",
       schema: `${prefix}/${userId}/schema.ts`,
@@ -72,9 +72,9 @@ export class DrizzleService {
     };
 
     return config;
-  }
+  },
 
-  jsonToDrizzle(schema: z.infer<typeof schemaDefinitionSchema>): string {
+  jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>): string => {
     let drizzleSchema = `import { pgTable, serial, varchar, timestamp, integer, text, boolean, numeric, date, time, json, jsonb, uuid, decimal, real, doublePrecision } from 'drizzle-orm/pg-core';
 
 `;
@@ -174,7 +174,5 @@ export class DrizzleService {
     }
 
     return drizzleSchema;
-  }
-}
-
-export const drizzleService = new DrizzleService();
+  },
+});
