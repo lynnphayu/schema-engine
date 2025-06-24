@@ -47,7 +47,9 @@ export class DrizzleService {
   }
 
   async updateSnapshot(config: string): Promise<void> {
-    const { stdout: _stdout, stderr } = await execAsync(`pnpm drizzle-kit up --config=${config}`);
+    const { stdout: _stdout, stderr } = await execAsync(
+      `pnpm drizzle-kit up --config=${config}`,
+    );
     if (stderr) {
       throw new Error(`Drizzle kit snapshot update failed: ${stderr}`);
     }
@@ -63,7 +65,9 @@ export class DrizzleService {
         table: `__${userId}__migrations__`,
       },
       dbCredentials: {
-        url: process.env.DATABASE_URL || "postgresql://postgres@127.0.0.1:5432/schemas",
+        url:
+          process.env.DATABASE_URL ||
+          "postgresql://postgres@127.0.0.1:5432/schemas",
       },
     };
 
@@ -85,7 +89,9 @@ export class DrizzleService {
         let drizzleType: string;
 
         // Map SQL types to Drizzle ORM types
-        const typeMatch = column.type.toLowerCase().match(/^([a-z]+)(\((\d+)\))?/i);
+        const typeMatch = column.type
+          .toLowerCase()
+          .match(/^([a-z]+)(\((\d+)\))?/i);
         const baseType = typeMatch ? typeMatch[1] : column.type.toLowerCase();
         const size = typeMatch ? typeMatch[3] : null;
 
@@ -151,7 +157,10 @@ export class DrizzleService {
           drizzleType += ".notNull()";
         }
         if (column.default) {
-          if (baseType === "timestamp" && column.default.toLowerCase() === "current_timestamp") {
+          if (
+            baseType === "timestamp" &&
+            column.default.toLowerCase() === "current_timestamp"
+          ) {
             drizzleType += ".defaultNow()";
           } else {
             drizzleType += `.default(${column.default})`;

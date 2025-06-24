@@ -6,7 +6,7 @@ export const basicRouteMiddleware =
   <
     B extends z.ZodTypeAny,
     P extends z.ZodTypeAny,
-    Q extends z.ZodTypeAny
+    Q extends z.ZodTypeAny,
   >(validationSchemas: {
     body?: B;
     params?: P;
@@ -16,8 +16,8 @@ export const basicRouteMiddleware =
     handler: (
       req: Request<z.infer<P>, unknown, z.infer<B>, z.infer<Q>>,
       res: Response,
-      next: NextFunction
-    ) => R
+      next: NextFunction,
+    ) => R,
   ) =>
   (req: Request, res: Response, next: NextFunction) => {
     const schemasArray: z.ZodTypeAny[] = [];

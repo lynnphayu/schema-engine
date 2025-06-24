@@ -25,7 +25,7 @@ export class ValidationError extends Error {
   constructor(
     message?: string,
     details?: unknown,
-    code = ERROR_CODES.VALIDATION_ERROR
+    code = ERROR_CODES.VALIDATION_ERROR,
   ) {
     const errorDef = getErrorDefinition(code);
     super(message || errorDef.message);
@@ -79,7 +79,7 @@ export const errorHandler: ErrorRequestHandler = (
   err: Error | AppError,
   req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ) => {
   // Log error for debugging
   console.error("Global Error Handler:", {
@@ -96,7 +96,7 @@ export const errorHandler: ErrorRequestHandler = (
     const response = createErrorResponse(
       ERROR_CODES.VALIDATION_ERROR,
       formatted.message,
-      formatted.issues
+      formatted.issues,
     );
     return res.status(400).json(response);
   }
@@ -136,7 +136,7 @@ export const errorHandler: ErrorRequestHandler = (
 };
 
 export const asyncHandler = (
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>,
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
@@ -146,7 +146,7 @@ export const asyncHandler = (
 export const notFoundHandler = (req: Request, res: Response) => {
   const response = createErrorResponse(
     ERROR_CODES.ROUTE_NOT_FOUND,
-    `Route ${req.method} ${req.originalUrl} not found`
+    `Route ${req.method} ${req.originalUrl} not found`,
   );
   res.status(404).json(response);
 };

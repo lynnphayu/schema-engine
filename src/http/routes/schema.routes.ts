@@ -10,7 +10,7 @@ router.post(
   basicRouteMiddleware({
     body: schemaRequestSchema,
     params: tenantRouteSchema,
-  })(schemaController.validateSchema.bind(schemaController))
+  })(schemaController.validateSchema.bind(schemaController)),
 );
 
 router.post(
@@ -18,14 +18,14 @@ router.post(
   basicRouteMiddleware({
     body: schemaRequestSchema,
     params: tenantRouteSchema,
-  })(schemaController.generateSchema.bind(schemaController))
+  })(schemaController.generateSchema.bind(schemaController)),
 );
 
 router.post(
   "/migrate/:tenantId",
   basicRouteMiddleware({
     params: tenantRouteSchema,
-  })(schemaController.migrateSchema.bind(schemaController))
+  })(schemaController.migrateSchema.bind(schemaController)),
 );
 
 export { router as schemaRoutes };

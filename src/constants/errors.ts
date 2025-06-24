@@ -225,7 +225,7 @@ export const ERROR_DICTIONARY: Record<
 
 // Helper function to get error definition
 export const getErrorDefinition = (
-  code: keyof typeof ERROR_CODES
+  code: keyof typeof ERROR_CODES,
 ): ErrorDefinition => {
   return ERROR_DICTIONARY[code];
 };
@@ -234,7 +234,7 @@ export const getErrorDefinition = (
 export const createErrorResponse = (
   code: keyof typeof ERROR_CODES,
   customMessage?: string,
-  details?: unknown
+  details?: unknown,
 ) => {
   const errorDef = getErrorDefinition(code);
   const response: Record<string, unknown> = {

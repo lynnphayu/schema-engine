@@ -1,10 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
 import type { z } from "zod";
-import {
-  DatabaseError,
-  NotFoundError,
-  ValidationError,
-} from "../middleware/error.middleware";
 import { drizzleService } from "#/services/drizzle.service";
 import { filesystemService } from "#/services/filesystem.service";
 import type {
@@ -12,6 +7,11 @@ import type {
   schemaRequestSchema,
   tenantRouteSchema,
 } from "#/types/schema";
+import {
+  DatabaseError,
+  NotFoundError,
+  ValidationError,
+} from "../middleware/error.middleware";
 
 export class SchemaController {
   async generateSchema(
@@ -21,7 +21,7 @@ export class SchemaController {
       z.infer<typeof schemaRequestSchema>
     >,
     res: Response<ApiResponse>,
-    next: NextFunction
+    next: NextFunction,
   ) {
     try {
       // Body is already validated by middleware
@@ -35,12 +35,12 @@ export class SchemaController {
       // Generate config and pull existing schema
       const cfg = await drizzleService.generateConfig(
         drizzleArtifactsDir,
-        tenantId
+        tenantId,
       );
       const cfgPath = await filesystemService.write(
         outputDir,
         "config.json",
-        JSON.stringify(cfg, null, 2)
+        JSON.stringify(cfg, null, 2),
       );
       await drizzleService.pull(cfgPath);
 
@@ -71,7 +71,7 @@ export class SchemaController {
   async migrateSchema(
     req: Request<z.infer<typeof tenantRouteSchema>, ApiResponse>,
     res: Response<ApiResponse>,
-    next: NextFunction
+    next: NextFunction,
   ) {
     try {
       const { tenantId } = req.params;
@@ -82,7 +82,7 @@ export class SchemaController {
       // Check if config exists
       if (!(await filesystemService.exists(outputDir, "config.json"))) {
         throw new NotFoundError(
-          `No configuration found for user ${tenantId}. Please generate schema first.`
+          `No configuration found for user ${tenantId}. Please generate schema first.`,
         );
       }
 
@@ -110,7 +110,7 @@ export class SchemaController {
       z.infer<typeof schemaRequestSchema>
     >,
     res: Response<ApiResponse>,
-    next: NextFunction
+    next: NextFunction,
   ) {
     try {
       const { schema } = req.body;
@@ -159,7 +159,7 @@ export class SchemaController {
           name: columnName,
           type: columnType,
         })),
-      })
+      }),
     );
 
     return { tables };

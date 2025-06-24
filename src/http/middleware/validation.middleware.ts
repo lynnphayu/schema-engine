@@ -5,7 +5,11 @@ import { z } from "zod";
 type SameLength<
   T extends readonly unknown[],
   P extends readonly unknown[],
-> = T["length"] extends P["length"] ? (P["length"] extends T["length"] ? true : false) : false;
+> = T["length"] extends P["length"]
+  ? P["length"] extends T["length"]
+    ? true
+    : false
+  : false;
 
 // Type to infer parsed results from Zod schemas
 type InferParsedResults<T extends readonly z.ZodTypeAny[]> = {
@@ -40,7 +44,9 @@ export const validateBody = <T extends z.ZodTypeAny>(schema: T) => {
 };
 
 // Multi-schema validator with length constraint and inferred types
-export const validateMultiple = <T extends readonly z.ZodTypeAny[]>(...schemas: T) => {
+export const validateMultiple = <T extends readonly z.ZodTypeAny[]>(
+  ...schemas: T
+) => {
   return <Args extends readonly unknown[]>(
     ...args: SameLength<T, Args> extends true ? Args : never
   ): InferParsedResults<T> => {
