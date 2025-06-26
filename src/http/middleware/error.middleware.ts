@@ -5,6 +5,7 @@ import type {
   Response,
 } from "express";
 import { ZodError } from "zod";
+import { isDevelopment } from "#/config/env";
 import {
   createErrorResponse,
   ERROR_CODES,
@@ -121,7 +122,6 @@ export const errorHandler: ErrorRequestHandler = (
   }
 
   // Default error response
-  const isDevelopment = process.env.NODE_ENV === "development";
   const errorCode = ERROR_CODES.INTERNAL_SERVER_ERROR;
   const errorMessage = isDevelopment
     ? err.message

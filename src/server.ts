@@ -1,9 +1,9 @@
 import { app } from "./app";
 
-const port = process.env.PORT || 3000;
+import { env } from "./config/env";
 
-app.listen(port, () => {
-  console.log(`🚀 Schema Engine server is running on port ${port}`);
-  console.log(`📊 Health check: http://localhost:${port}/health`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
+app.listen(env.PORT, () => {
+  console.log(`🚀 Schema Engine server is running on port ${env.PORT}`);
+  console.log(`📊 Health check: http://localhost:${env.PORT}/health`);
+  console.log(`🔧 Environment: ${env.NODE_ENV}`);
 });

@@ -4,7 +4,11 @@ import { NotFoundError } from "#/http/middleware/error.middleware";
 import type { schemaDefinitionSchema } from "#/types/schema";
 
 interface DrizzleKitPort {
-  generateConfig: (prefix: string, userId: string) => Promise<Config>;
+  generateConfig: (
+    prefix: string,
+    userId: string,
+    databaseUrl: string,
+  ) => Promise<Config>;
   pull: (config: string) => Promise<void>;
   drizzleToSQL: (config: string) => Promise<void>;
   jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>) => string;
@@ -13,22 +17,33 @@ interface DrizzleKitPort {
 
 interface FSPort {
   write: (dir: string, filename: string, content: string) => Promise<string>;
-  read: (dir: string, filename: string) => Promise<string>;
-  delete: (dir: string) => Promise<void>;
-  exists: (dir: string, filename?: string) => Promise<boolean>;
+  read: (dir: string, filename: string) => Promise<Buffer>;
+  ls: (dir: string) => Promise<string[]>;
 }
 
-export default (fsport: FSPort, drizzleKitPort: DrizzleKitPort) => ({
+interface S3Port {
+  uploadFile: (file: File, tenantId: string) => Promise<string>;
+  getPresignedUrl: (key: string, expireInSeconds: number) => Promise<string>;
+}
+
+export default (
+  fsport: FSPort,
+  drizzleKitPort: DrizzleKitPort,
+  s3Port: S3Port,
+) => ({
   generate: async (
     tenantId: string,
     schema: z.infer<typeof schemaDefinitionSchema>,
+    databaseUrl: string,
   ) => {
     const drizzleArtifactsDir = "drizzle";
     const outputDir = `${drizzleArtifactsDir}/${tenantId}`;
+    const migrationsDir = `${outputDir}/migrations`;
 
     const cfg = await drizzleKitPort.generateConfig(
       drizzleArtifactsDir,
       tenantId,
+      databaseUrl,
     );
     const cfgPath = await fsport.write(
       outputDir,
@@ -41,28 +56,24 @@ export default (fsport: FSPort, drizzleKitPort: DrizzleKitPort) => ({
     await fsport.write(outputDir, "schema.ts", drizzleSchema);
 
     await drizzleKitPort.drizzleToSQL(cfgPath);
-    return {
-      files: {
-        config: `${outputDir}/config.json`,
-        schema: `${outputDir}/schema.ts`,
-        migrations: `${outputDir}/migrations`,
-      },
-    };
-  },
 
-  migrate: async (tenantId: string) => {
-    const drizzleArtifactsDir = "drizzle";
-    const outputDir = `${drizzleArtifactsDir}/${tenantId}`;
-    const cfgPath = `${outputDir}/config.json`;
+    const migrations = await fsport
+      .ls(migrationsDir)
+      .then((migrations) => migrations.filter((file) => file.endsWith(".sql")));
+    const latestMigration = migrations.sort().pop();
 
-    // Check if config exists
-    if (!(await fsport.exists(outputDir, "config.json"))) {
-      throw new NotFoundError(
-        `No configuration found for user ${tenantId}. Please generate schema first.`,
-      );
+    if (!latestMigration) {
+      throw new Error("Latest migration not found");
     }
+    const migration = await fsport.read(migrationsDir, latestMigration);
+    const presignedUrl = await s3Port.uploadFile(
+      new File([migration], latestMigration),
+      tenantId,
+    );
 
-    await drizzleKitPort.migrate(cfgPath);
+    return {
+      path: presignedUrl,
+    };
   },
 
   jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>) => {

@@ -55,7 +55,11 @@ export default () => ({
     }
   },
 
-  generateConfig: async (prefix: string, userId: string): Promise<Config> => {
+  generateConfig: async (
+    prefix: string,
+    userId: string,
+    databaseUrl: string,
+  ): Promise<Config> => {
     const config: Config = {
       dialect: "postgresql",
       schema: `${prefix}/${userId}/schema.ts`,
@@ -64,11 +68,7 @@ export default () => ({
         prefix: "timestamp",
         table: `__${userId}__migrations__`,
       },
-      dbCredentials: {
-        url:
-          process.env.DATABASE_URL ||
-          "postgresql://postgres@127.0.0.1:5432/schemas",
-      },
+      dbCredentials: { url: databaseUrl },
     };
 
     return config;

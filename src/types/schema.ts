@@ -21,6 +21,7 @@ export const schemaRequestSchema = z.object({
   schema: z.object({
     tables: z.array(tableDefinitionSchema),
   }),
+  databaseUrl: z.string().url("Invalid database URL format"),
 });
 
 export const tenantRouteSchema = z.object({

@@ -12,13 +12,8 @@ interface IEngineService {
   generate: (
     tenantId: string,
     schema: z.infer<typeof schemaDefinitionSchema>,
-  ) => Promise<{
-    files: {
-      config: string;
-      schema: string;
-      migrations: string;
-    };
-  }>;
+    databaseUrl: string,
+  ) => Promise<unknown>;
 }
 
 interface IDrizzleKitPort {
@@ -36,17 +31,19 @@ export class SchemaController {
       ApiResponse,
       z.infer<typeof schemaRequestSchema>
     >,
-    res: Response<ApiResponse>,
   ) {
-    const { schema } = req.body;
+    const { schema, databaseUrl } = req.body;
     const { tenantId } = req.params;
-    const { files } = await this.engineService.generate(tenantId, schema);
-
-    res.status(200).json({
+    const data = await this.engineService.generate(
+      tenantId,
+      schema,
+      databaseUrl,
+    );
+    return {
       message: `Successfully generated schema and migration files for user ${tenantId}`,
       success: true,
-      data: { files },
-    });
+      data,
+    };
   }
 
   async migrateSchema(
@@ -70,21 +67,42 @@ export class SchemaController {
     const { schema } = req.body;
     const { tenantId } = req.params;
 
-    if (!schema.tables || typeof schema.tables !== "object") {
-      throw new Error("Schema must have a 'tables' object");
+    if (!schema.tables || !Array.isArray(schema.tables)) {
+      throw new ValidationError("Schema must have a 'tables' array");
     }
 
-    for (const [tableName, columns] of Object.entries(schema.tables)) {
-      if (!columns || typeof columns !== "object") {
+    if (schema.tables.length === 0) {
+      throw new ValidationError("Schema must have at least one table");
+    }
+
+    for (const table of schema.tables) {
+      if (!table.name || typeof table.name !== "string") {
+        throw new ValidationError("Each table must have a valid name");
+      }
+
+      if (!table.columns || !Array.isArray(table.columns)) {
         throw new ValidationError(
-          `Table '${tableName}' must have columns defined`,
+          `Table '${table.name}' must have a columns array`,
         );
       }
 
-      if (Object.keys(columns).length === 0) {
+      if (table.columns.length === 0) {
         throw new ValidationError(
-          `Table '${tableName}' must have at least one column`,
+          `Table '${table.name}' must have at least one column`,
         );
+      }
+
+      for (const column of table.columns) {
+        if (!column.name || typeof column.name !== "string") {
+          throw new ValidationError(
+            `Table '${table.name}' has a column with invalid name`,
+          );
+        }
+        if (!column.type || typeof column.type !== "string") {
+          throw new ValidationError(
+            `Column '${column.name}' in table '${table.name}' must have a valid type`,
+          );
+        }
       }
     }
 
@@ -93,7 +111,7 @@ export class SchemaController {
     return {
       message: `Schema validation successful for user ${tenantId}`,
       success: true,
-      data: JSON.parse(drizzleSchema),
+      data: { drizzleSchema },
     };
   }
 

@@ -13,22 +13,12 @@ export default () => ({
     return filePath;
   },
 
-  read: async (dir: string, filename: string): Promise<string> => {
+  ls: async (dir: string): Promise<string[]> => {
+    return await fs.readdir(dir);
+  },
+
+  read: async (dir: string, filename: string) => {
     const filePath = path.join(dir, filename);
-    return await fs.readFile(filePath, "utf8");
-  },
-
-  delete: async (dir: string): Promise<void> => {
-    await fs.rm(dir, { recursive: true, force: true });
-  },
-
-  exists: async (dir: string, filename?: string): Promise<boolean> => {
-    try {
-      const filePath = filename ? path.join(dir, filename) : dir;
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
+    return await fs.readFile(filePath);
   },
 });
