@@ -1,10 +1,97 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Config } from "drizzle-kit";
-import type { z } from "zod";
-import type { schemaDefinitionSchema } from "../types/schema";
+import type {
+  ColumnDefinition,
+  DynamicSchema,
+  TableDefinition,
+} from "../types/schema";
 
 const execAsync = promisify(exec);
+
+const generateColumn = (column: ColumnDefinition) => {
+  const imports: string[] = [];
+  imports.push(column.column_type);
+
+  let args = `"${column.identifier}"`;
+  if (column.length && ["varchar"].includes(column.column_type)) {
+    args += `, { length: ${column.length} }`;
+  }
+
+  let expr = `${column.column_type}(${args})`;
+  if (!column.is_nullable) expr += ".notNull()";
+  if (column.is_primary_key) expr += ".primaryKey()";
+  if (column.is_unique && !column.is_primary_key) expr += ".unique()";
+  if (column.default_value !== null) {
+    expr += `.default(${JSON.stringify(column.default_value)})`;
+  }
+  if (column.check_constraint) {
+    expr += `.check(${column.check_constraint})`;
+  }
+  if (column.is_auto_increment) {
+    expr += ".autoIncrement()";
+  }
+  if (column.column_order) {
+    expr += `.order(${column.column_order})`;
+  }
+
+  return {
+    line: `  ${column.identifier}: ${expr},`,
+    imports,
+  };
+};
+
+const generateTable = (table: TableDefinition) => {
+  const imports = new Set<string>(["pgTable"]);
+  const columnLines: string[] = [];
+  const indexLines: string[] = [];
+  const fkLines: string[] = [];
+
+  for (const col of table.columns) {
+    const { line, imports: colImports } = generateColumn(col);
+    columnLines.push(line);
+    colImports.forEach((i) => imports.add(i));
+  }
+
+  if (table.indexes) {
+    imports.add("index");
+    for (const idx of table.indexes) {
+      const columns = idx.columns.includes(",")
+        ? `[${idx.columns
+            .split(",")
+            .map((c: string) => `"${c.trim()}"`)
+            .join(", ")}]`
+        : `"${idx.columns}"`;
+      const options = idx.is_unique
+        ? `, { unique: true${idx.where_clause ? `, where: sql\`${idx.where_clause}\`` : ""} }`
+        : idx.where_clause
+          ? `, { where: sql\`${idx.where_clause}\` }`
+          : "";
+      indexLines.push(
+        `export const ${idx.identifier} = index("${idx.identifier}", ${columns}${options});`,
+      );
+    }
+  }
+
+  if (table.foreign_keys) {
+    imports.add("foreignKey");
+    for (const fk of table.foreign_keys) {
+      const fkLine = `export const ${fk.constraint_name} = foreignKey(() => ${table.identifier}.${fk.source_column}, {
+  name: "${fk.constraint_name}",
+  references: () => ${fk.referenced_table}.${fk.referenced_column},
+  onUpdate: "${fk.on_update}",
+  onDelete: "${fk.on_delete}"
+});`;
+      fkLines.push(fkLine);
+    }
+  }
+
+  const tableDef = `export const ${table.identifier} = pgTable("${table.identifier}", {
+${columnLines.join("\n")}
+});`;
+
+  return { lines: [tableDef, ...indexLines, ...fkLines], imports };
+};
 
 export default () => ({
   drizzleToSQL: async (config: string): Promise<void> => {
@@ -74,105 +161,20 @@ export default () => ({
     return config;
   },
 
-  jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>): string => {
-    let drizzleSchema = `import { pgTable, serial, varchar, timestamp, integer, text, boolean, numeric, date, time, json, jsonb, uuid, decimal, real, doublePrecision } from 'drizzle-orm/pg-core';
+  jsonToDrizzle: (schema: DynamicSchema) => {
+    const allImports = new Set<string>();
+    const allLines: string[] = [];
 
-`;
-
-    // Generate table definitions
     for (const table of schema.tables) {
-      drizzleSchema += `export const ${table.name} = pgTable('${table.name}', {
-`;
-
-      // Generate column definitions
-      for (const column of table.columns) {
-        let drizzleType: string;
-
-        // Map SQL types to Drizzle ORM types
-        const typeMatch = column.type
-          .toLowerCase()
-          .match(/^([a-z]+)(\((\d+)\))?/i);
-        const baseType = typeMatch ? typeMatch[1] : column.type.toLowerCase();
-        const size = typeMatch ? typeMatch[3] : null;
-
-        switch (baseType) {
-          case "serial":
-            drizzleType = "serial().primaryKey()";
-            break;
-          case "integer":
-          case "int":
-            drizzleType = "integer()";
-            break;
-          case "bigint":
-            drizzleType = "bigint()";
-            break;
-          case "varchar":
-          case "character varying":
-            drizzleType = size ? `varchar(${size})` : "varchar(255)";
-            break;
-          case "text":
-            drizzleType = "text()";
-            break;
-          case "boolean":
-          case "bool":
-            drizzleType = "boolean()";
-            break;
-          case "numeric":
-          case "decimal":
-            drizzleType = size ? `decimal(${size})` : "decimal()";
-            break;
-          case "real":
-            drizzleType = "real()";
-            break;
-          case "double precision":
-            drizzleType = "doublePrecision()";
-            break;
-          case "timestamp":
-            drizzleType = "timestamp()";
-            break;
-          case "date":
-            drizzleType = "date()";
-            break;
-          case "time":
-            drizzleType = "time()";
-            break;
-          case "json":
-            drizzleType = "json()";
-            break;
-          case "jsonb":
-            drizzleType = "jsonb()";
-            break;
-          case "uuid":
-            drizzleType = "uuid()";
-            break;
-          default:
-            drizzleType = `text() /* Original type: ${column.type} */`;
-        }
-
-        // Add constraints
-        if (column.unique) {
-          drizzleType += ".unique()";
-        }
-        if (column.nullable === false) {
-          drizzleType += ".notNull()";
-        }
-        if (column.default) {
-          if (
-            baseType === "timestamp" &&
-            column.default.toLowerCase() === "current_timestamp"
-          ) {
-            drizzleType += ".defaultNow()";
-          } else {
-            drizzleType += `.default(${column.default})`;
-          }
-        }
-
-        drizzleSchema += `  ${column.name}: ${drizzleType},\n`;
-      }
-
-      drizzleSchema += "});\n\n";
+      const { lines, imports } = generateTable(table);
+      lines.forEach((l) => allLines.push(l));
+      imports.forEach((i) => allImports.add(i));
     }
 
-    return drizzleSchema;
+    const importLine = `import { ${Array.from(allImports).sort().join(", ")} } from "drizzle-orm/pg-core";\n`;
+    if (allImports.has("sql")) {
+      return `import { sql } from "drizzle-orm";\n${importLine}\n${allLines.join("\n\n")}`;
+    }
+    return `${importLine}\n${allLines.join("\n\n")}`;
   },
 });

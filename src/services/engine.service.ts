@@ -22,7 +22,10 @@ interface FSPort {
 }
 
 interface S3Port {
-  uploadFile: (file: File, tenantId: string) => Promise<string>;
+  uploadFile: (
+    file: File,
+    tenantId: string,
+  ) => Promise<{ bucket: string; key: string }>;
   getPresignedUrl: (key: string, expireInSeconds: number) => Promise<string>;
 }
 
