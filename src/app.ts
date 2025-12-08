@@ -1,16 +1,23 @@
-import { json } from "body-parser";
-import express, { type Express } from "express";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import {
   errorHandler,
   notFoundHandler,
 } from "./http/middleware/error.middleware";
 import { routes } from "./http/routes";
 
-const app: Express = express();
+const app = new Hono();
 
-app.use(json());
-app.use("/", routes);
-app.use(notFoundHandler);
-app.use(errorHandler);
+// Global middleware
+app.use("*", logger());
+app.use("*", cors());
+
+// Routes
+app.route("/", routes);
+
+// Error handlers
+app.notFound((c) => notFoundHandler(c));
+app.onError((err, c) => errorHandler(err, c));
 
 export { app };

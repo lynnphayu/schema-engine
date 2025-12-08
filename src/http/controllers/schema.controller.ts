@@ -1,71 +1,48 @@
-import type { Request, Response } from "express";
-import type { z } from "zod";
-import type {
-  ApiResponse,
-  schemaDefinitionSchema,
-  schemaRequestSchema,
-  tenantRouteSchema,
-} from "#/types/schema";
+import type { Context } from "hono";
+import { inject, injectable } from "inversify";
+import "reflect-metadata";
+import { TYPES } from "#/di/types";
+import type { DrizzleKitService } from "#/services/drizzle.service";
+import type { EngineService } from "#/services/engine.service";
 import { ValidationError } from "../middleware/error.middleware";
 
-interface IEngineService {
-  generate: (
-    tenantId: string,
-    schema: z.infer<typeof schemaDefinitionSchema>,
-    databaseUrl: string,
-  ) => Promise<unknown>;
-}
-
-interface IDrizzleKitPort {
-  jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>) => string;
-}
-
+@injectable()
 export class SchemaController {
   constructor(
-    private readonly engineService: IEngineService,
-    private readonly drizzleKitPort: IDrizzleKitPort,
+    @inject(TYPES.EngineService) private readonly engineService: EngineService,
+    @inject(TYPES.DrizzleKitService)
+    private readonly drizzleKitService: DrizzleKitService,
   ) {}
-  async generateSchema(
-    req: Request<
-      z.infer<typeof tenantRouteSchema>,
-      ApiResponse,
-      z.infer<typeof schemaRequestSchema>
-    >,
-  ) {
-    const { schema, databaseUrl } = req.body;
-    const { tenantId } = req.params;
+
+  async generateSchema(c: Context): Promise<Response> {
+    const { schema, databaseUrl, tables } = await c.req.json();
+    const { tenantId } = c.req.param();
+
     const data = await this.engineService.generate(
       tenantId,
-      schema,
+      { schema, tables },
       databaseUrl,
     );
-    return {
+
+    return c.json({
       message: `Successfully generated schema and migration files for user ${tenantId}`,
       success: true,
       data,
-    };
+    });
   }
 
-  async migrateSchema(
-    req: Request<z.infer<typeof tenantRouteSchema>, ApiResponse>,
-  ) {
-    const { tenantId } = req.params;
+  async migrateSchema(c: Context): Promise<Response> {
+    const { tenantId } = c.req.param();
 
-    return {
+    return c.json({
       message: `Migration applied successfully for user ${tenantId}`,
       success: true,
-    };
+    });
   }
 
-  async validateSchema(
-    req: Request<
-      z.infer<typeof tenantRouteSchema>,
-      ApiResponse,
-      z.infer<typeof schemaRequestSchema>
-    >,
-  ) {
-    const { schema } = req.body;
-    const { tenantId } = req.params;
+  async validateSchema(c: Context): Promise<Response> {
+    const { schema } = await c.req.json();
+    const { tenantId } = c.req.param();
 
     if (!schema.tables || !Array.isArray(schema.tables)) {
       throw new ValidationError("Schema must have a 'tables' array");
@@ -106,28 +83,12 @@ export class SchemaController {
       }
     }
 
-    const drizzleSchema = this.drizzleKitPort.jsonToDrizzle(schema);
+    const drizzleSchema = this.drizzleKitService.jsonToDrizzle(schema);
 
-    return {
+    return c.json({
       message: `Schema validation successful for user ${tenantId}`,
       success: true,
       data: { drizzleSchema },
-    };
-  }
-
-  private convertSchemaFormat(schema: {
-    tables: Record<string, Record<string, string>>;
-  }) {
-    const tables = Object.entries(schema.tables).map(
-      ([tableName, columns]) => ({
-        name: tableName,
-        columns: Object.entries(columns).map(([columnName, columnType]) => ({
-          name: columnName,
-          type: columnType,
-        })),
-      }),
-    );
-
-    return { tables };
+    });
   }
 }

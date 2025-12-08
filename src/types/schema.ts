@@ -17,13 +17,6 @@ export const schemaDefinitionSchema = z.object({
   tables: z.array(tableDefinitionSchema),
 });
 
-export const schemaRequestSchema = z.object({
-  schema: z.object({
-    tables: z.array(tableDefinitionSchema),
-  }),
-  databaseUrl: z.string().url("Invalid database URL format"),
-});
-
 export const tenantRouteSchema = z.object({
   tenantId: z.string().min(1, "tenantID cannot be empty"),
 });
@@ -84,7 +77,8 @@ const CheckConstraintSchema = z
     ];
     return patterns.some((pattern) => pattern.test(val));
   }, "Invalid check constraint format")
-  .optional();
+  .optional()
+  .nullable();
 
 export const ColumnDefinitionSchema = z
   .object({
@@ -98,26 +92,46 @@ export const ColumnDefinitionSchema = z
     is_unique: z.boolean(),
     is_auto_increment: z.boolean(),
     column_order: z.number().int().positive(),
-    default_value: z.string().optional().nullable(),
+    default_now: z.boolean().optional().nullable(),
+    default_random: z.boolean().optional().nullable(),
+    default_value: z
+      .union([
+        z.string(),
+        z.boolean(),
+        z.number(),
+        z.record(z.string(), z.unknown()),
+      ])
+      .optional()
+      .nullable(),
     check_constraint: CheckConstraintSchema,
   })
-  .refine(
-    (data) => {
-      if (data.is_primary_key && data.is_nullable) {
-        return false;
-      }
-      if (
-        data.is_auto_increment &&
-        !["INTEGER", "BIGINT", "SMALLINT"].includes(data.column_type)
-      ) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: "Invalid column configuration",
-    },
-  );
+  .superRefine((data, ctx) => {
+    if (data.is_primary_key && data.is_nullable) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Primary key cannot be nullable",
+        path: ["is_primary_key"],
+      });
+    }
+    if (
+      data.default_now &&
+      !["TIMESTAMP", "TIMESTAMPTZ", "TIME"].includes(data.column_type)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "default_now can only be used with TIMESTAMP or TIMESTAMPTZ columns",
+        path: ["default_now"],
+      });
+    }
+    if (data.default_random && !["UUID"].includes(data.column_type)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "default_random can only be used with UUID columns",
+        path: ["default_random"],
+      });
+    }
+  });
 
 const IndexTypeSchema = z.enum([
   "BTREE",
@@ -241,6 +255,14 @@ export const DynamicSchemaSchema = z
         "Schema validation failed: table references or identifier uniqueness",
     },
   );
+
+export const schemaRequestSchema = z.object({
+  databaseUrl: z.string().url("Invalid database URL format"),
+  schema: SchemaDefinitionSchema,
+  tables: z
+    .array(TableDefinitionSchema)
+    .min(1, "Schema must have at least one table"),
+});
 
 export type ColumnDefinition = z.infer<typeof ColumnDefinitionSchema>;
 export type IndexDefinition = z.infer<typeof IndexDefinitionSchema>;

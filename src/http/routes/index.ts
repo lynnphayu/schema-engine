@@ -1,10 +1,10 @@
-import { Router } from "express";
+import { Hono } from "hono";
 import { healthRoutes } from "./health.routes";
 import { schemaRoutes } from "./schema.routes";
 
-const router: Router = Router();
+const routes = new Hono();
 
-router.use("/health", healthRoutes);
-router.use("/schema", schemaRoutes);
+routes.route("/health", healthRoutes);
+routes.route("/schema", schemaRoutes);
 
-export { router as routes };
+export { routes };

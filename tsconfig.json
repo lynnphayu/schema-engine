@@ -1,36 +1,45 @@
 {
   "compilerOptions": {
-    "module": "CommonJS",
-    "declaration": true,
-    "removeComments": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "allowSyntheticDefaultImports": true,
     "target": "ES2022",
-    "sourceMap": true,
-    "outDir": "./dist",
-    "isolatedModules": true,
-    "types": ["node"],
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "baseUrl": ".",
-    "paths": {
-      "#/*": ["src/*"]
-    },
-    "lib": ["ES2022", "DOM"],
-    "incremental": true,
-    "skipLibCheck": true,
+    "module": "ESNext",
+    "lib": [
+      "ES2022"
+    ],
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
     "strictNullChecks": true,
     "noImplicitAny": true,
-    "strict": true,
     "strictFunctionTypes": true,
     "strictPropertyInitialization": false,
     "strictBindCallApply": true,
-    "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
     "noImplicitThis": true,
-    "alwaysStrict": true
+    "alwaysStrict": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "types": [
+      "@types/bun"
+    ],
+    "paths": {
+      "#/*": [
+        "./src/*"
+      ]
+    }
   },
-  "exclude": ["drizzle/**/*"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "drizzle/**/*",
+    "node_modules",
+    "dist"
+  ]
 }

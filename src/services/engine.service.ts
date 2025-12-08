@@ -1,66 +1,44 @@
-import type { Config } from "drizzle-kit";
-import type { z } from "zod";
-import { NotFoundError } from "#/http/middleware/error.middleware";
-import type { schemaDefinitionSchema } from "#/types/schema";
+import { File } from "node:buffer";
+import { inject, injectable } from "inversify";
+import "reflect-metadata";
+import { TYPES } from "#/di/types";
+import type { DynamicSchema } from "#/types/schema";
+import type { DrizzleKitService } from "./drizzle.service";
+import type { FilesystemService } from "./filesystem.service";
+import type { S3Service } from "./s3.service";
 
-interface DrizzleKitPort {
-  generateConfig: (
-    prefix: string,
-    userId: string,
-    databaseUrl: string,
-  ) => Promise<Config>;
-  pull: (config: string) => Promise<void>;
-  drizzleToSQL: (config: string) => Promise<void>;
-  jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>) => string;
-  migrate: (config: string) => Promise<void>;
-}
+@injectable()
+export class EngineService {
+  constructor(
+    @inject(TYPES.FilesystemService) private fsService: FilesystemService,
+    @inject(TYPES.DrizzleKitService)
+    private drizzleKitService: DrizzleKitService,
+    @inject(TYPES.S3Service) private s3Service: S3Service,
+  ) {}
 
-interface FSPort {
-  write: (dir: string, filename: string, content: string) => Promise<string>;
-  read: (dir: string, filename: string) => Promise<Buffer>;
-  ls: (dir: string) => Promise<string[]>;
-}
-
-interface S3Port {
-  uploadFile: (
-    file: File,
-    tenantId: string,
-  ) => Promise<{ bucket: string; key: string }>;
-  getPresignedUrl: (key: string, expireInSeconds: number) => Promise<string>;
-}
-
-export default (
-  fsport: FSPort,
-  drizzleKitPort: DrizzleKitPort,
-  s3Port: S3Port,
-) => ({
-  generate: async (
-    tenantId: string,
-    schema: z.infer<typeof schemaDefinitionSchema>,
-    databaseUrl: string,
-  ) => {
+  async generate(tenantId: string, schema: DynamicSchema, databaseUrl: string) {
     const drizzleArtifactsDir = "drizzle";
     const outputDir = `${drizzleArtifactsDir}/${tenantId}`;
     const migrationsDir = `${outputDir}/migrations`;
 
-    const cfg = await drizzleKitPort.generateConfig(
+    const cfg = await this.drizzleKitService.generateConfig(
       drizzleArtifactsDir,
       tenantId,
       databaseUrl,
     );
-    const cfgPath = await fsport.write(
+    const cfgPath = await this.fsService.write(
       outputDir,
       "config.json",
       JSON.stringify(cfg, null, 2),
     );
-    await drizzleKitPort.pull(cfgPath);
+    await this.drizzleKitService.pull(cfgPath);
 
-    const drizzleSchema = drizzleKitPort.jsonToDrizzle(schema);
-    await fsport.write(outputDir, "schema.ts", drizzleSchema);
+    const drizzleSchema = this.drizzleKitService.jsonToDrizzle(schema);
+    await this.fsService.write(outputDir, "schema.ts", drizzleSchema);
 
-    await drizzleKitPort.drizzleToSQL(cfgPath);
+    await this.drizzleKitService.drizzleToSQL(cfgPath);
 
-    const migrations = await fsport
+    const migrations = await this.fsService
       .ls(migrationsDir)
       .then((migrations) => migrations.filter((file) => file.endsWith(".sql")));
     const latestMigration = migrations.sort().pop();
@@ -68,8 +46,8 @@ export default (
     if (!latestMigration) {
       throw new Error("Latest migration not found");
     }
-    const migration = await fsport.read(migrationsDir, latestMigration);
-    const presignedUrl = await s3Port.uploadFile(
+    const migration = await this.fsService.read(migrationsDir, latestMigration);
+    const presignedUrl = await this.s3Service.uploadFile(
       new File([migration], latestMigration),
       tenantId,
     );
@@ -77,9 +55,9 @@ export default (
     return {
       path: presignedUrl,
     };
-  },
+  }
 
-  jsonToDrizzle: (schema: z.infer<typeof schemaDefinitionSchema>) => {
-    return drizzleKitPort.jsonToDrizzle(schema);
-  },
-});
+  jsonToDrizzle(schema: DynamicSchema): string {
+    return this.drizzleKitService.jsonToDrizzle(schema);
+  }
+}

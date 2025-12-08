@@ -5,13 +5,19 @@ import {
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { inject, injectable } from "inversify";
 import mime from "mime-types";
+import "reflect-metadata";
 import { env } from "#/config/env";
+import { TYPES } from "#/di/types";
 
-export default (s3Client: S3Client) => ({
-  uploadFile: async (file: File, tenantId: string) => {
+@injectable()
+export class S3Service {
+  constructor(@inject(TYPES.S3Client) private s3Client: S3Client) {}
+
+  async uploadFile(file: File, tenantId: string) {
     const command = new Upload({
-      client: s3Client,
+      client: this.s3Client,
       params: {
         Bucket: env.S3_BUCKET_NAME,
         Key: `tmp/${tenantId}/${file.name}`,
@@ -21,20 +27,19 @@ export default (s3Client: S3Client) => ({
     return command.done().then((data) => {
       if (!data.Bucket || !data.Key) {
         throw new Error("File upload failed. No key generated.");
-      } else {
-        return {
-          bucket: data.Bucket,
-          key: data.Key,
-        };
       }
+      return {
+        bucket: data.Bucket,
+        key: data.Key,
+      };
     });
-  },
+  }
 
   async getPresignedUrl(key: string, expireInSeconds: number) {
     await this.checkObjectExists(key);
 
     const s3PresignedUrl = await getSignedUrl(
-      s3Client,
+      this.s3Client,
       new GetObjectCommand({
         Bucket: env.S3_BUCKET_NAME,
         Key: key,
@@ -43,7 +48,7 @@ export default (s3Client: S3Client) => ({
     );
 
     return s3PresignedUrl;
-  },
+  }
 
   async generateGetSignedUrl(key: string, expireInSeconds: number) {
     const command = new GetObjectCommand({
@@ -53,10 +58,10 @@ export default (s3Client: S3Client) => ({
       ResponseContentType: mime.lookup(key) || "application/octet-stream",
     });
 
-    return getSignedUrl(s3Client, command, {
+    return getSignedUrl(this.s3Client, command, {
       expiresIn: expireInSeconds,
     });
-  },
+  }
 
   async checkObjectExists(key: string) {
     try {
@@ -64,10 +69,10 @@ export default (s3Client: S3Client) => ({
         Key: key,
         Bucket: env.S3_BUCKET_NAME,
       });
-      const result = await s3Client.send(command);
+      const result = await this.s3Client.send(command);
       return result;
-    } catch (e) {
+    } catch (_e) {
       throw new Error("File not found");
     }
-  },
-});
+  }
+}

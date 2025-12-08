@@ -1,0 +1,11 @@
+[install]
+# Use pnpm for package management
+registry = "https://registry.npmjs.org/"
+
+[run]
+# Enable hot reloading in development
+hot = true
+
+[test]
+# Test configuration
+preload = ["./src/di/container.ts"]

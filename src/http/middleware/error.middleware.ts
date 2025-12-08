@@ -1,9 +1,5 @@
-import type {
-  ErrorRequestHandler,
-  NextFunction,
-  Request,
-  Response,
-} from "express";
+import type { Context } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
 import { isDevelopment } from "#/config/env";
 import {
@@ -76,18 +72,13 @@ const formatZodError = (error: ZodError) => {
   };
 };
 
-export const errorHandler: ErrorRequestHandler = (
-  err: Error | AppError,
-  req: Request,
-  res: Response,
-  _next: NextFunction,
-) => {
+export const errorHandler = (err: Error | AppError, c: Context) => {
   // Log error for debugging
   console.error("Global Error Handler:", {
     error: err.message,
     stack: err.stack,
-    url: req.url,
-    method: req.method,
+    url: c.req.url,
+    method: c.req.method,
     timestamp: new Date().toISOString(),
   });
 
@@ -99,26 +90,45 @@ export const errorHandler: ErrorRequestHandler = (
       formatted.message,
       formatted.issues,
     );
-    return res.status(400).json(response);
+    return c.json(response, 400);
+  }
+
+  // Handle HTTPException from Hono
+  if (err instanceof HTTPException) {
+    return c.json(
+      {
+        success: false,
+        error: err.message,
+        code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+      },
+      err.status,
+    );
   }
 
   if ("statusCode" in err && typeof err.statusCode === "number") {
     const appErr = err as AppError;
-    const statusCode = appErr.statusCode || 500;
+    const statusCode = (appErr.statusCode || 500) as
+      | 400
+      | 401
+      | 403
+      | 404
+      | 409
+      | 500
+      | 503;
     const code = (appErr.code ||
       ERROR_CODES.UNKNOWN_ERROR) as keyof typeof ERROR_CODES;
     const response = createErrorResponse(code, appErr.message, appErr.details);
-    return res.status(statusCode).json(response);
+    return c.json(response, statusCode);
   }
 
   if (err.message.includes("ECONNREFUSED")) {
     const response = createErrorResponse(ERROR_CODES.DATABASE_CONNECTION_ERROR);
-    return res.status(503).json(response);
+    return c.json(response, 503);
   }
 
   if (err.message.includes("duplicate key")) {
     const response = createErrorResponse(ERROR_CODES.DUPLICATE_RESOURCE);
-    return res.status(409).json(response);
+    return c.json(response, 409);
   }
 
   // Default error response
@@ -132,21 +142,13 @@ export const errorHandler: ErrorRequestHandler = (
     (response as Record<string, unknown>).stack = err.stack;
   }
 
-  return res.status(500).json(response);
+  return c.json(response, 500);
 };
 
-export const asyncHandler = (
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>,
-) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-};
-
-export const notFoundHandler = (req: Request, res: Response) => {
+export const notFoundHandler = (c: Context) => {
   const response = createErrorResponse(
     ERROR_CODES.ROUTE_NOT_FOUND,
-    `Route ${req.method} ${req.originalUrl} not found`,
+    `Route ${c.req.method} ${c.req.url} not found`,
   );
-  res.status(404).json(response);
+  return c.json(response, 404);
 };

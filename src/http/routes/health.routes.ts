@@ -1,13 +1,13 @@
-import { type Request, type Response, Router } from "express";
+import { Hono } from "hono";
 
-const router: Router = Router();
+const healthRoutes = new Hono();
 
-router.get("/", (_req: Request, res: Response) => {
-  res.json({
+healthRoutes.get("/", (c) => {
+  return c.json({
     status: "healthy",
     timestamp: new Date().toISOString(),
     service: "schema-engine",
   });
 });
 
-export { router as healthRoutes };
+export { healthRoutes };
