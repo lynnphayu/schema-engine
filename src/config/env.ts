@@ -9,17 +9,13 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
 
-  CLERK_PUBLISHABLE_KEY: z.string(),
-  CLERK_SECRET_KEY: z.string(),
-  CLERK_JWT_KEY: z.string().optional(),
-  CLERK_WEBHOOK_SECRET: z.string().optional(),
-
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
 
   S3_ACCESS_KEY_ID: z.string(),
   S3_SECRET_ACCESS_KEY: z.string(),
   S3_REGION: z.string(),
   S3_BUCKET_NAME: z.string(),
+  S3_ENDPOINT: z.string().url().optional(),
   S3_LOCALSTACK: z.coerce.boolean().default(false),
 });
 

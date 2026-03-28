@@ -23,6 +23,9 @@ const s3Config: S3ClientConfig = {
 if (env.S3_LOCALSTACK) {
   s3Config.forcePathStyle = true;
   s3Config.endpoint = "http://127.0.0.1:4566";
+} else if (env.S3_ENDPOINT) {
+  s3Config.forcePathStyle = true;
+  s3Config.endpoint = env.S3_ENDPOINT;
 }
 
 // Bind external dependencies
