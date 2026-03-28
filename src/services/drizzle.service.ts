@@ -278,7 +278,7 @@ ${columnLines.join("\n")}
 export class DrizzleKitService {
   async drizzleToSQL(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit generate --config=${config}`,
+      `bunx drizzle-kit generate --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit generation failed: ${stderr}`);
@@ -287,7 +287,7 @@ export class DrizzleKitService {
 
   async migrate(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit migrate --config=${config}`,
+      `bunx drizzle-kit migrate --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit migration failed: ${stderr}`);
@@ -296,7 +296,7 @@ export class DrizzleKitService {
 
   async pull(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit pull --config=${config}`,
+      `bunx drizzle-kit pull --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit pull failed: ${stderr}`);
@@ -305,7 +305,7 @@ export class DrizzleKitService {
 
   async validate(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit check --config=${config}`,
+      `bunx drizzle-kit check --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit validation failed: ${stderr}`);
@@ -314,7 +314,7 @@ export class DrizzleKitService {
 
   async updateSnapshot(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
-      `pnpm drizzle-kit up --config=${config}`,
+      `bunx drizzle-kit up --config=${config}`,
     );
     if (stderr) {
       throw new Error(`Drizzle kit snapshot update failed: ${stderr}`);

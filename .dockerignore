@@ -1,0 +1,10 @@
+node_modules
+dist
+drizzle
+.env*
+!.env.example
+*.md
+.git
+.gitignore
+biome.json
+tsconfig.json
