@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Schema generator for DAGFlow using Drizzle ORM",
   "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
