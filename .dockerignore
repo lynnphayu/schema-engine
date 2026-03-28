@@ -7,4 +7,3 @@ drizzle
 .git
 .gitignore
 biome.json
-tsconfig.json
