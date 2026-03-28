@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
 import { isDevelopment } from "#/config/env";
+import { logger } from "#/config/logger";
 import {
   createErrorResponse,
   ERROR_CODES,
@@ -73,12 +74,10 @@ const formatZodError = (error: ZodError) => {
 };
 
 export const errorHandler = (err: Error | AppError, c: Context) => {
-  console.error("Global Error Handler:", {
-    error: err.message,
-    stack: err.stack,
+  logger.error({
+    err: { message: err.message, stack: err.stack },
     url: c.req.url,
     method: c.req.method,
-    timestamp: new Date().toISOString(),
   });
 
   if (err instanceof ZodError) {
