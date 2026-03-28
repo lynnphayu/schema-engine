@@ -73,7 +73,6 @@ const formatZodError = (error: ZodError) => {
 };
 
 export const errorHandler = (err: Error | AppError, c: Context) => {
-  // Log error for debugging
   console.error("Global Error Handler:", {
     error: err.message,
     stack: err.stack,
@@ -82,7 +81,6 @@ export const errorHandler = (err: Error | AppError, c: Context) => {
     timestamp: new Date().toISOString(),
   });
 
-  // Handle Zod validation errors
   if (err instanceof ZodError) {
     const formatted = formatZodError(err);
     const response = createErrorResponse(
@@ -93,7 +91,6 @@ export const errorHandler = (err: Error | AppError, c: Context) => {
     return c.json(response, 400);
   }
 
-  // Handle HTTPException from Hono
   if (err instanceof HTTPException) {
     return c.json(
       {
@@ -131,7 +128,6 @@ export const errorHandler = (err: Error | AppError, c: Context) => {
     return c.json(response, 409);
   }
 
-  // Default error response
   const errorCode = ERROR_CODES.INTERNAL_SERVER_ERROR;
   const errorMessage = isDevelopment
     ? err.message

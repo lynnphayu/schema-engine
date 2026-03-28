@@ -297,10 +297,7 @@ export class DrizzleKitService {
   async pull(config: string): Promise<void> {
     const { stdout: _stdout, stderr } = await execAsync(
       `pnpm drizzle-kit pull --config=${config}`,
-    ).catch((err) => {
-      console.error(err);
-      throw err;
-    });
+    );
     if (stderr) {
       throw new Error(`Drizzle kit pull failed: ${stderr}`);
     }

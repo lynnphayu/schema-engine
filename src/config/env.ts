@@ -19,7 +19,6 @@ const envSchema = z.object({
   S3_LOCALSTACK: z.coerce.boolean().default(false),
 });
 
-// Parse and validate environment variables
 const envResult = envSchema.safeParse(process.env);
 
 if (!envResult.success) {
@@ -30,10 +29,8 @@ if (!envResult.success) {
 
 export const env = envResult.data;
 
-// Helper function to check if we're in development
 export const isDevelopment = env.NODE_ENV === "development";
 export const isProduction = env.NODE_ENV === "production";
 export const isTest = env.NODE_ENV === "test";
 
-// Export types for TypeScript
 export type Environment = typeof env;

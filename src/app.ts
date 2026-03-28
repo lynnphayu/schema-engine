@@ -9,14 +9,11 @@ import { routes } from "./http/routes";
 
 const app = new Hono();
 
-// Global middleware
 app.use("*", logger());
 app.use("*", cors());
 
-// Routes
 app.route("/", routes);
 
-// Error handlers
 app.notFound((c) => notFoundHandler(c));
 app.onError((err, c) => errorHandler(err, c));
 

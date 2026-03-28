@@ -11,7 +11,6 @@ import { TYPES } from "./types";
 
 const container = new Container();
 
-// Configure S3 Client
 const s3Config: S3ClientConfig = {
   region: env.S3_REGION,
   credentials: {
@@ -28,12 +27,10 @@ if (env.S3_LOCALSTACK) {
   s3Config.endpoint = env.S3_ENDPOINT;
 }
 
-// Bind external dependencies
 container
   .bind<S3Client>(TYPES.S3Client)
   .toConstantValue(new S3Client(s3Config));
 
-// Bind services
 container
   .bind<FilesystemService>(TYPES.FilesystemService)
   .to(FilesystemService)
@@ -48,7 +45,6 @@ container
   .to(EngineService)
   .inSingletonScope();
 
-// Bind controllersschemaDefinitionSchema
 container.bind<SchemaController>(TYPES.SchemaController).to(SchemaController);
 
 export { container };
