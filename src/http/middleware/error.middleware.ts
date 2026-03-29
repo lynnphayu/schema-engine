@@ -4,6 +4,20 @@ import { ZodError } from "zod";
 import { isDevelopment } from "#/config/env";
 import { logger } from "#/config/logger";
 import {
+  DrizzleKitCommandError,
+  DrizzleKitSchemaError,
+  DrizzleKitUnsupportedColumnError,
+  EngineMigrationNotFoundError,
+  FilesystemListError,
+  FilesystemReadError,
+  FilesystemWriteError,
+  RequestJsonParseError,
+  RequestValidationError,
+  S3ObjectNotFoundError,
+  S3PresignError,
+  S3UploadError,
+} from "#/errors";
+import {
   createErrorResponse,
   ERROR_CODES,
   getErrorDefinition,
@@ -90,6 +104,29 @@ export const errorHandler = (err: Error | AppError, c: Context) => {
     return c.json(response, 400);
   }
 
+  if (err instanceof RequestValidationError) {
+    const issues = err.issues.map((issue) => ({
+      field: issue.path.join("."),
+      message: issue.message,
+      code: issue.code,
+    }));
+    const response = createErrorResponse(
+      ERROR_CODES.VALIDATION_ERROR,
+      "Validation failed",
+      { part: err.part, issues },
+    );
+    return c.json(response, 400);
+  }
+
+  if (err instanceof RequestJsonParseError) {
+    const response = createErrorResponse(
+      ERROR_CODES.VALIDATION_ERROR,
+      "Invalid JSON request body",
+      isDevelopment ? { cause: err.cause } : undefined,
+    );
+    return c.json(response, 400);
+  }
+
   if (err instanceof HTTPException) {
     return c.json(
       {
@@ -99,6 +136,100 @@ export const errorHandler = (err: Error | AppError, c: Context) => {
       },
       err.status,
     );
+  }
+
+  if (err instanceof FilesystemWriteError) {
+    const response = createErrorResponse(
+      ERROR_CODES.FILE_WRITE_ERROR,
+      err.message || `Failed to write ${err.filename}`,
+      isDevelopment ? { dir: err.dir, cause: err.cause } : undefined,
+    );
+    return c.json(response, 500);
+  }
+
+  if (err instanceof FilesystemReadError) {
+    const response = createErrorResponse(
+      ERROR_CODES.FILE_READ_ERROR,
+      err.message || `Failed to read ${err.filename}`,
+      isDevelopment ? { dir: err.dir, cause: err.cause } : undefined,
+    );
+    return c.json(response, 500);
+  }
+
+  if (err instanceof FilesystemListError) {
+    const response = createErrorResponse(
+      ERROR_CODES.FILE_SYSTEM_ERROR,
+      err.message || "Failed to list directory",
+      isDevelopment ? { dir: err.dir, cause: err.cause } : undefined,
+    );
+    return c.json(response, 500);
+  }
+
+  if (err instanceof DrizzleKitCommandError) {
+    const response = createErrorResponse(
+      ERROR_CODES.SCHEMA_GENERATION_FAILED,
+      err.message || `Drizzle CLI failed (${err.operation})`,
+      isDevelopment
+        ? { operation: err.operation, command: err.command, stderr: err.stderr }
+        : undefined,
+    );
+    return c.json(response, 500);
+  }
+
+  if (err instanceof DrizzleKitUnsupportedColumnError) {
+    const response = createErrorResponse(
+      ERROR_CODES.INVALID_DATA_TYPE,
+      err.message || `Unsupported column type: ${err.columnType}`,
+      isDevelopment ? { columnType: err.columnType } : undefined,
+    );
+    return c.json(response, 400);
+  }
+
+  if (err instanceof DrizzleKitSchemaError) {
+    const response = createErrorResponse(
+      ERROR_CODES.INVALID_SCHEMA_FORMAT,
+      err.message || "Schema code generation failed",
+      isDevelopment ? { cause: err.cause } : undefined,
+    );
+    return c.json(response, 400);
+  }
+
+  if (err instanceof S3ObjectNotFoundError) {
+    const response = createErrorResponse(
+      ERROR_CODES.FILE_NOT_FOUND,
+      err.message || `Object not found: ${err.key}`,
+      isDevelopment ? { key: err.key } : undefined,
+    );
+    return c.json(response, 404);
+  }
+
+  if (err instanceof S3UploadError) {
+    const response = createErrorResponse(
+      ERROR_CODES.SCHEMA_GENERATION_FAILED,
+      err.message || "Upload to object storage failed",
+      isDevelopment
+        ? { tenantId: err.tenantId, fileName: err.fileName, cause: err.cause }
+        : undefined,
+    );
+    return c.json(response, 500);
+  }
+
+  if (err instanceof S3PresignError) {
+    const response = createErrorResponse(
+      ERROR_CODES.INTERNAL_SERVER_ERROR,
+      err.message || "Failed to generate signed URL",
+      isDevelopment ? { key: err.key, cause: err.cause } : undefined,
+    );
+    return c.json(response, 500);
+  }
+
+  if (err instanceof EngineMigrationNotFoundError) {
+    const response = createErrorResponse(
+      ERROR_CODES.SCHEMA_GENERATION_FAILED,
+      err.message || "No migration file was produced",
+      isDevelopment ? { migrationsDir: err.migrationsDir } : undefined,
+    );
+    return c.json(response, 500);
   }
 
   if ("statusCode" in err && typeof err.statusCode === "number") {

@@ -1,23 +1,46 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { injectable } from "inversify";
-import "reflect-metadata";
+import { Effect } from "effect";
+import {
+  FilesystemListError,
+  FilesystemReadError,
+  FilesystemWriteError,
+} from "#/errors/fs";
 
-@injectable()
-export class FilesystemService {
-  async write(dir: string, filename: string, content: string): Promise<string> {
-    await fs.mkdir(dir, { recursive: true });
-    const filePath = path.join(dir, filename);
-    await fs.writeFile(filePath, content, "utf8");
-    return filePath;
-  }
+export const makeFilesystemService = () => ({
+  write: (dir: string, filename: string, content: string) =>
+    Effect.tryPromise({
+      try: async () => {
+        await fs.mkdir(dir, { recursive: true });
+        const filePath = path.join(dir, filename);
+        await fs.writeFile(filePath, content, "utf8");
+        return filePath;
+      },
+      catch: (cause) =>
+        new FilesystemWriteError({
+          dir,
+          filename,
+          cause,
+        }),
+    }),
 
-  async ls(dir: string): Promise<string[]> {
-    return await fs.readdir(dir);
-  }
+  ls: (dir: string) =>
+    Effect.tryPromise({
+      try: () => fs.readdir(dir),
+      catch: (cause) => new FilesystemListError({ dir, cause }),
+    }),
 
-  async read(dir: string, filename: string): Promise<Buffer> {
-    const filePath = path.join(dir, filename);
-    return await fs.readFile(filePath);
-  }
-}
+  read: (dir: string, filename: string) =>
+    Effect.tryPromise({
+      try: async () => {
+        const filePath = path.join(dir, filename);
+        return await fs.readFile(filePath);
+      },
+      catch: (cause) =>
+        new FilesystemReadError({
+          dir,
+          filename,
+          cause,
+        }),
+    }),
+});

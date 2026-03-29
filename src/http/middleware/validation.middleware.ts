@@ -1,107 +1,91 @@
-import type { Context, MiddlewareHandler, Next } from "hono";
-import { z } from "zod";
+import { Cause, Effect, Exit } from "effect";
+import type { MiddlewareHandler, Next } from "hono";
+import type { z } from "zod";
+import {
+  RequestJsonParseError,
+  RequestValidationError,
+} from "#/errors/validation";
+
+const runValidationOrThrow = async (
+  program: Effect.Effect<void, RequestValidationError | RequestJsonParseError>,
+): Promise<void> => {
+  const exit = await Effect.runPromiseExit(program);
+  if (Exit.isFailure(exit)) {
+    throw Cause.squash(exit.cause);
+  }
+};
 
 export const validateBody = <T extends z.ZodTypeAny>(
   schema: T,
-): MiddlewareHandler => {
-  return async (c: Context, next: Next) => {
-    try {
-      const body = await c.req.json();
-      const validatedBody = schema.parse(body);
-      c.set("validatedBody", validatedBody);
-      await next();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errorMessages = error.errors
-          .map((err) => `${err.path.join(".")}: ${err.message}`)
-          .join(", ");
-
-        return c.json(
-          {
-            error: `Validation failed: ${errorMessages}`,
-            success: false,
-            details: error.errors,
-          },
-          400,
-        );
-      }
-      return c.json(
-        {
-          error: `Invalid request body: ${error instanceof Error ? error.message : String(error)}`,
-          success: false,
-        },
-        400,
-      );
-    }
+): MiddlewareHandler<{ Variables: { validatedBody: z.infer<T> } }> => {
+  return async (c, next: Next) => {
+    await runValidationOrThrow(
+      Effect.gen(function* () {
+        const body = yield* Effect.tryPromise({
+          try: () => c.req.json(),
+          catch: (cause) => new RequestJsonParseError({ cause }),
+        });
+        const parsed = schema.safeParse(body);
+        if (!parsed.success) {
+          yield* Effect.fail(
+            new RequestValidationError({
+              part: "body",
+              issues: parsed.error.issues,
+            }),
+          );
+          return;
+        }
+        c.set("validatedBody", parsed.data);
+      }),
+    );
+    await next();
   };
 };
 
 export const validateParams = <T extends z.ZodTypeAny>(
   schema: T,
-): MiddlewareHandler => {
-  return async (c: Context, next: Next) => {
-    try {
-      const params = c.req.param();
-      const validatedParams = schema.parse(params);
-      c.set("validatedParams", validatedParams);
-      await next();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errorMessages = error.errors
-          .map((err) => `${err.path.join(".")}: ${err.message}`)
-          .join(", ");
-
-        return c.json(
-          {
-            error: `Validation failed: ${errorMessages}`,
-            success: false,
-            details: error.errors,
-          },
-          400,
-        );
-      }
-      return c.json(
-        {
-          error: `Invalid request params: ${error instanceof Error ? error.message : String(error)}`,
-          success: false,
-        },
-        400,
-      );
-    }
+): MiddlewareHandler<{ Variables: { validatedParams: z.infer<T> } }> => {
+  return async (c, next: Next) => {
+    await runValidationOrThrow(
+      Effect.gen(function* () {
+        const params = c.req.param();
+        const parsed = schema.safeParse(params);
+        if (!parsed.success) {
+          yield* Effect.fail(
+            new RequestValidationError({
+              part: "params",
+              issues: parsed.error.issues,
+            }),
+          );
+          return;
+        }
+        c.set("validatedParams", parsed.data);
+      }),
+    );
+    await next();
   };
 };
 
 export const validateQuery = <T extends z.ZodTypeAny>(
   schema: T,
-): MiddlewareHandler => {
-  return async (c: Context, next: Next) => {
-    try {
-      const query = c.req.query();
-      const validatedQuery = schema.parse(query);
-      c.set("validatedQuery", validatedQuery);
-      await next();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errorMessages = error.errors
-          .map((err) => `${err.path.join(".")}: ${err.message}`)
-          .join(", ");
-
-        return c.json(
-          {
-            error: `Validation failed: ${errorMessages}`,
-            success: false,
-            details: error.errors,
-          },
-          400,
-        );
-      }
-      return c.json(
-        {
-          error: `Invalid request query: ${error instanceof Error ? error.message : String(error)}`,
-          success: false,
-        },
-        400,
-      );
-    }
+): MiddlewareHandler<{ Variables: { validatedQuery: z.infer<T> } }> => {
+  return async (c, next: Next) => {
+    await runValidationOrThrow(
+      Effect.gen(function* () {
+        const query = c.req.query();
+        const parsed = schema.safeParse(query);
+        if (!parsed.success) {
+          yield* Effect.fail(
+            new RequestValidationError({
+              part: "query",
+              issues: parsed.error.issues,
+            }),
+          );
+          return;
+        }
+        c.set("validatedQuery", parsed.data);
+      }),
+    );
+    await next();
   };
 };

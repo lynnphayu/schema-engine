@@ -5,74 +5,96 @@ import {
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { inject, injectable } from "inversify";
+import { Effect } from "effect";
 import mime from "mime-types";
-import "reflect-metadata";
 import { env } from "#/config/env";
-import { TYPES } from "#/di/types";
+import {
+  S3ObjectNotFoundError,
+  S3PresignError,
+  S3UploadError,
+} from "#/errors/s3";
 
-@injectable()
-export class S3Service {
-  constructor(@inject(TYPES.S3Client) private s3Client: S3Client) {}
-
-  async uploadFile(file: File, tenantId: string) {
-    const command = new Upload({
-      client: this.s3Client,
-      params: {
-        Bucket: env.S3_BUCKET_NAME,
-        Key: `tmp/${tenantId}/${file.name}`,
-        Body: file,
+export const makeS3Service = (s3Client: S3Client) => {
+  const checkObjectExists = (key: string) =>
+    Effect.tryPromise({
+      try: async () => {
+        const command = new HeadObjectCommand({
+          Key: key,
+          Bucket: env.S3_BUCKET_NAME,
+        });
+        return await s3Client.send(command);
       },
+      catch: () => new S3ObjectNotFoundError({ key }),
     });
-    return command.done().then((data) => {
-      if (!data.Bucket || !data.Key) {
-        throw new Error("File upload failed. No key generated.");
-      }
-      return {
-        bucket: data.Bucket,
-        key: data.Key,
-      };
-    });
-  }
 
-  async getPresignedUrl(key: string, expireInSeconds: number) {
-    await this.checkObjectExists(key);
-
-    const s3PresignedUrl = await getSignedUrl(
-      this.s3Client,
-      new GetObjectCommand({
-        Bucket: env.S3_BUCKET_NAME,
-        Key: key,
+  return {
+    uploadFile: (file: File, tenantId: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          const command = new Upload({
+            client: s3Client,
+            params: {
+              Bucket: env.S3_BUCKET_NAME,
+              Key: `tmp/${tenantId}/${file.name}`,
+              Body: file,
+            },
+          });
+          const data = await command.done();
+          if (!data.Bucket || !data.Key) {
+            throw new S3UploadError({
+              tenantId,
+              fileName: file.name,
+              cause: new Error("No bucket or key in upload result"),
+            });
+          }
+          return {
+            bucket: data.Bucket,
+            key: data.Key,
+          };
+        },
+        catch: (cause) =>
+          cause instanceof S3UploadError
+            ? cause
+            : new S3UploadError({
+                tenantId,
+                fileName: file.name,
+                cause,
+              }),
       }),
-      { expiresIn: expireInSeconds },
-    );
 
-    return s3PresignedUrl;
-  }
+    getPresignedUrl: (key: string, expireInSeconds: number) =>
+      Effect.gen(function* () {
+        yield* checkObjectExists(key);
+        return yield* Effect.tryPromise({
+          try: () =>
+            getSignedUrl(
+              s3Client,
+              new GetObjectCommand({
+                Bucket: env.S3_BUCKET_NAME,
+                Key: key,
+              }),
+              { expiresIn: expireInSeconds },
+            ),
+          catch: (cause) => new S3PresignError({ key, cause }),
+        });
+      }),
 
-  async generateGetSignedUrl(key: string, expireInSeconds: number) {
-    const command = new GetObjectCommand({
-      Bucket: env.S3_BUCKET_NAME,
-      Key: key,
-      ResponseContentDisposition: "inline",
-      ResponseContentType: mime.lookup(key) || "application/octet-stream",
-    });
+    generateGetSignedUrl: (key: string, expireInSeconds: number) =>
+      Effect.tryPromise({
+        try: () => {
+          const command = new GetObjectCommand({
+            Bucket: env.S3_BUCKET_NAME,
+            Key: key,
+            ResponseContentDisposition: "inline",
+            ResponseContentType: mime.lookup(key) || "application/octet-stream",
+          });
+          return getSignedUrl(s3Client, command, {
+            expiresIn: expireInSeconds,
+          });
+        },
+        catch: (cause) => new S3PresignError({ key, cause }),
+      }),
 
-    return getSignedUrl(this.s3Client, command, {
-      expiresIn: expireInSeconds,
-    });
-  }
-
-  async checkObjectExists(key: string) {
-    try {
-      const command = new HeadObjectCommand({
-        Key: key,
-        Bucket: env.S3_BUCKET_NAME,
-      });
-      const result = await this.s3Client.send(command);
-      return result;
-    } catch (_e) {
-      throw new Error("File not found");
-    }
-  }
-}
+    checkObjectExists,
+  };
+};

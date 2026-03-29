@@ -1,9 +1,14 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { Config } from "drizzle-kit";
-import { injectable } from "inversify";
+import { Effect } from "effect";
 import _ from "lodash";
-import "reflect-metadata";
+import {
+  DrizzleKitCommandError,
+  type DrizzleKitOperation,
+  DrizzleKitSchemaError,
+  DrizzleKitUnsupportedColumnError,
+} from "#/errors/drizzle-kit";
 import type {
   ColumnDefinition,
   DynamicSchema,
@@ -11,6 +16,28 @@ import type {
 } from "../types/schema";
 
 const execAsync = promisify(exec);
+
+const runDrizzleKit = (operation: DrizzleKitOperation, command: string) =>
+  Effect.tryPromise({
+    try: async () => {
+      const { stderr } = await execAsync(command);
+      if (stderr) {
+        throw new DrizzleKitCommandError({
+          operation,
+          command,
+          stderr,
+        });
+      }
+    },
+    catch: (cause) =>
+      cause instanceof DrizzleKitCommandError
+        ? cause
+        : new DrizzleKitCommandError({
+            operation,
+            command,
+            stderr: cause instanceof Error ? cause.message : String(cause),
+          }),
+  });
 
 const sanitizeSqlExpression = (expression: string) =>
   expression.replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
@@ -129,7 +156,9 @@ const resolveColumnBuilder = (
 ): ColumnBuilderResult => {
   const builder = columnTypeBuilders[column.column_type];
   if (!builder) {
-    throw new Error(`Unsupported column type: ${column.column_type}`);
+    throw new DrizzleKitUnsupportedColumnError({
+      columnType: column.column_type,
+    });
   }
   return builder(column);
 };
@@ -274,58 +303,81 @@ ${columnLines.join("\n")}
   return { lines: [tableDef, ...indexLines, ...fkLines], imports, requiresSql };
 };
 
-@injectable()
+function jsonToDrizzleSync(schema: DynamicSchema): string {
+  const allImports = new Set<string>();
+  const allLines: string[] = [];
+
+  let requiresSql = false;
+
+  for (const table of schema.tables) {
+    const { lines, imports, requiresSql: tableNeedsSql } = generateTable(table);
+    for (const line of lines) {
+      allLines.push(line);
+    }
+    for (const pgImport of imports) {
+      allImports.add(pgImport);
+    }
+    if (tableNeedsSql) {
+      requiresSql = true;
+    }
+  }
+
+  const pgImports = Array.from(allImports)
+    .filter((imp) => imp !== "sql")
+    .sort();
+  const importLines: string[] = [];
+
+  if (requiresSql) {
+    importLines.push(`import { sql } from "drizzle-orm";`);
+  }
+
+  if (pgImports.length > 0) {
+    importLines.push(
+      `import { ${pgImports.join(", ")} } from "drizzle-orm/pg-core";`,
+    );
+  }
+
+  return `${importLines.join("\n")}\n\n${allLines.join("\n\n")}`;
+}
+
 export class DrizzleKitService {
-  async drizzleToSQL(config: string): Promise<void> {
-    const { stdout: _stdout, stderr } = await execAsync(
+  drizzleToSQL(config: string): Effect.Effect<void, DrizzleKitCommandError> {
+    return runDrizzleKit(
+      "drizzleToSQL",
       `bunx drizzle-kit generate --config=${config}`,
     );
-    if (stderr) {
-      throw new Error(`Drizzle kit generation failed: ${stderr}`);
-    }
   }
 
-  async migrate(config: string): Promise<void> {
-    const { stdout: _stdout, stderr } = await execAsync(
+  migrate(config: string): Effect.Effect<void, DrizzleKitCommandError> {
+    return runDrizzleKit(
+      "migrate",
       `bunx drizzle-kit migrate --config=${config}`,
     );
-    if (stderr) {
-      throw new Error(`Drizzle kit migration failed: ${stderr}`);
-    }
   }
 
-  async pull(config: string): Promise<void> {
-    const { stdout: _stdout, stderr } = await execAsync(
-      `bunx drizzle-kit pull --config=${config}`,
-    );
-    if (stderr) {
-      throw new Error(`Drizzle kit pull failed: ${stderr}`);
-    }
+  pull(config: string): Effect.Effect<void, DrizzleKitCommandError> {
+    return runDrizzleKit("pull", `bunx drizzle-kit pull --config=${config}`);
   }
 
-  async validate(config: string): Promise<void> {
-    const { stdout: _stdout, stderr } = await execAsync(
+  validate(config: string): Effect.Effect<void, DrizzleKitCommandError> {
+    return runDrizzleKit(
+      "validate",
       `bunx drizzle-kit check --config=${config}`,
     );
-    if (stderr) {
-      throw new Error(`Drizzle kit validation failed: ${stderr}`);
-    }
   }
 
-  async updateSnapshot(config: string): Promise<void> {
-    const { stdout: _stdout, stderr } = await execAsync(
+  updateSnapshot(config: string): Effect.Effect<void, DrizzleKitCommandError> {
+    return runDrizzleKit(
+      "updateSnapshot",
       `bunx drizzle-kit up --config=${config}`,
     );
-    if (stderr) {
-      throw new Error(`Drizzle kit snapshot update failed: ${stderr}`);
-    }
   }
 
-  async generateConfig(
+  generateConfig(
     prefix: string,
     userId: string,
     databaseUrl: string,
-  ): Promise<Config> {
+  ): Effect.Effect<Config, never> {
     const config: Config = {
       dialect: "postgresql",
       schema: `${prefix}/${userId}/schema.ts`,
@@ -337,47 +389,21 @@ export class DrizzleKitService {
       dbCredentials: { url: databaseUrl },
     };
 
-    return config;
+    return Effect.succeed(config);
   }
 
-  jsonToDrizzle(schema: DynamicSchema): string {
-    const allImports = new Set<string>();
-    const allLines: string[] = [];
-
-    let requiresSql = false;
-
-    for (const table of schema.tables) {
-      const {
-        lines,
-        imports,
-        requiresSql: tableNeedsSql,
-      } = generateTable(table);
-      for (const line of lines) {
-        allLines.push(line);
-      }
-      for (const pgImport of imports) {
-        allImports.add(pgImport);
-      }
-      if (tableNeedsSql) {
-        requiresSql = true;
-      }
-    }
-
-    const pgImports = Array.from(allImports)
-      .filter((imp) => imp !== "sql")
-      .sort();
-    const importLines: string[] = [];
-
-    if (requiresSql) {
-      importLines.push(`import { sql } from "drizzle-orm";`);
-    }
-
-    if (pgImports.length > 0) {
-      importLines.push(
-        `import { ${pgImports.join(", ")} } from "drizzle-orm/pg-core";`,
-      );
-    }
-
-    return `${importLines.join("\n")}\n\n${allLines.join("\n\n")}`;
+  jsonToDrizzle(
+    schema: DynamicSchema,
+  ): Effect.Effect<
+    string,
+    DrizzleKitUnsupportedColumnError | DrizzleKitSchemaError
+  > {
+    return Effect.try({
+      try: () => jsonToDrizzleSync(schema),
+      catch: (cause) =>
+        cause instanceof DrizzleKitUnsupportedColumnError
+          ? cause
+          : new DrizzleKitSchemaError({ cause }),
+    });
   }
 }

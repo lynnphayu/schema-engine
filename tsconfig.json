@@ -23,8 +23,6 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
     "types": [
       "@types/bun"
     ],
